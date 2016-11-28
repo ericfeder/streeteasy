@@ -26,11 +26,27 @@ getAllBuildingURLs <- function(base_url){
 }
 
 # Extract transactions from building pages
+getAddressInfo <- function(house_number, street){
+  app_id <- Sys.getenv("NYC_API_ID")
+  app_key <- Sys.getenv("NYC_API_KEY")
+  base_url <- "https://api.cityofnewyork.us/geoclient/v1/address.json?houseNumber=%d&street=%s&borough=Manhattan&app_id=%s&app_key=%s"
+  url <- URLencode(sprintf(base_url, house_number, street, app_id, app_key))
+  message(sprintf("Hitting %s", url))
+  response <- content(GET(url))
+  return(response$address)
+}
 getStreetAddress <- function(page){
   address <- content(page) %>%
     html_nodes("h1+ .subtitle") %>% 
     html_text()
-  return(address)
+  house_number <- as.numeric(str_extract(address, "^[[0-9]]+"))
+  street <- str_extract(address, "^[[0-9]]+[[:alnum:]|[:space:]]+,")
+  street <- gsub("^[[:digit:]]+ |,", "", street)
+  address_info <- getAddressInfo(house_number, street)
+  return(list(address = address, 
+              house_number = house_number, 
+              street = street, 
+              address_info = address_info))
 }
 getActivityId <- function(page){
   page_content <- content(page, as = "text")
@@ -38,25 +54,15 @@ getActivityId <- function(page){
   id <- as.numeric(gsub("[^[:digit:]]", "", id_string))
   return(id)
 }
-getLatLon <- function(page){
-  page_content <- content(page, as = "text")
-  latlon_string <- str_extract(page_content, "se:map:point='[[0-9|.|-]]+,[[0-9|.|-]]+'")
-  latlon_string <- gsub("'", "", substring(latlon_string, 15))
-  latlon <- as.numeric(unlist(strsplit(latlon_string, ",")))
-  return(latlon)
-}
 getBuildingInfo <- function(building_url){
   url <- sprintf("http://streeteasy.com%s#tab_building_detail=3", building_url)
   message(sprintf("Scraping %s", url))
   page <- GET(url)
   street_address <- getStreetAddress(page)
   activity_id <- getActivityId(page)
-  lat_lon <- getLatLon(page)
   return(list(building_url = building_url,
-              street_address = street_address,
               activity_id = activity_id,
-              lat = lat_lon[1],
-              lon = lat_lon[2]))
+              street_address = street_address))
 }
 
 getTransactions <- function(info){
@@ -77,10 +83,12 @@ getTransactions <- function(info){
       html_attr("href")
     table <- data.frame(listing_url = links, 
                         building_url = info$building_url, 
-                        street_address = info$street_address,
-                        lat = info$lat,
-                        lon = info$lon,
-                        table)
+                        street_address = info$street_address$address,
+                        street = info$street_address$address_info$streetName1In,
+                        cross_street1 = info$street_address$address_info$lowCrossStreetName1,
+                        cross_street2 = info$street_address$address_info$highCrossStreetName1,
+                        table,
+                        stringsAsFactors = FALSE)
     return(table)
   }
 }
@@ -126,8 +134,8 @@ formatTransactions <- function(transactions_raw){
 
 # Run
 building_urls <- getAllBuildingURLs("http://streeteasy.com/buildings/hudson-heights")
-building_info <- mclapply(building_urls, getBuildingInfo, mc.cores = 5)
-transactions_raw <- mclapply(building_info, getTransactions, mc.cores = 5)
+building_info <- lapply(building_urls, getBuildingInfo)
+transactions_raw <- lapply(building_info, getTransactions)
 transactions_clean <- formatTransactions(transactions_raw)
 
 # Plot

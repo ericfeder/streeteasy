@@ -3,7 +3,9 @@ library(rvest)
 library(httr)
 library(stringr)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
+library(gbm)
 
 # Get list of buildings
 getBuildingURLs <- function(base_url, page_num){

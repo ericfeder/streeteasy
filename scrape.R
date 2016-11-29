@@ -84,7 +84,7 @@ getTransactions <- function(info){
     table <- data.frame(listing_url = links, 
                         building_url = info$building_url, 
                         street_address = info$street_address$address,
-                        street = info$street_address$address_info$streetName1In,
+                        street = info$street_address$address_info$giStreetName1,
                         cross_street1 = info$street_address$address_info$lowCrossStreetName1,
                         cross_street2 = info$street_address$address_info$highCrossStreetName1,
                         table,

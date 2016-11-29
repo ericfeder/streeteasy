@@ -133,7 +133,7 @@ formatTransactions <- function(transactions_raw){
 
 # Prepare data for model training
 prepareForTraining <- function(data){
-  data$extra_bath <- data$baths != "1 bath"
+  data$extra_bath <- factor(data$baths != "1 bath")
   data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
   data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
   data$days_ago <- as.numeric(Sys.Date() - data$date)

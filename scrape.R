@@ -3,7 +3,6 @@ library(rvest)
 library(httr)
 library(stringr)
 library(dplyr)
-library(parallel)
 library(ggplot2)
 
 # Get list of buildings
@@ -125,11 +124,31 @@ formatTransactions <- function(transactions_raw){
                                     `3.5 beds` = "4 beds")
   transactions_clean$beds[transactions_clean$beds == ""] <- NA
   transactions_clean$baths[transactions_clean$baths == ""] <- NA
-  transactions_clean$baths[transactions_clean$baths == "1,150 baths"] <- 1
+  transactions_clean$baths[transactions_clean$baths == "1,150 baths"] <- "1 bath"
   
   # Return
   return(transactions_clean)
   
+}
+
+# Prepare data for model training
+prepareForTraining <- function(data){
+  data$extra_bath <- data$baths != "1 bath"
+  data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
+  data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
+  data$days_ago <- as.numeric(Sys.Date() - data$date)
+  street_names <- data %>%
+    distinct(street_address, street, cross_street1, cross_street2) %>%
+    gather(type, street, -street_address) %>%
+    count(street) %>%
+    filter(n > 7 & street != "BEND") %>%
+    .$street
+  for (name in street_names){
+    new_colname <- tolower(gsub(" ", "_", paste("street", name)))
+    data[[new_colname]] <- factor(rowSums(name == data[, c("street", "cross_street1", "cross_street2")]) > 0)
+  }
+  data <- data[, c("rent", "beds", "extra_bath", "days_ago", "ft", tolower(gsub(" ", "_", paste("street", street_names))))]
+  return(data)
 }
 
 # Run
@@ -137,6 +156,10 @@ building_urls <- getAllBuildingURLs("http://streeteasy.com/buildings/hudson-heig
 building_info <- lapply(building_urls, getBuildingInfo)
 transactions_raw <- lapply(building_info, getTransactions)
 transactions_clean <- formatTransactions(transactions_raw)
+transactions_train <- prepareForTraining(transactions_clean)
+
+# Train model
+model <- gbm(rent ~ ., data = transactions_train)
 
 # Plot
 transactions_clean %>%

@@ -93,7 +93,7 @@ formatTransactions <- function(transactions_raw){
   
   # Rename columns
   transactions_bind$Floorplan <- NULL
-  colnames(transactions_bind) <- tolower(gsub("[^[:alpha:]]|_", "", colnames(transactions_bind)))
+  colnames(transactions_bind) <- tolower(gsub("[^[:alpha:]|_]", "", colnames(transactions_bind)))
   
   # Clean up column values
   transactions_bind$date <- as.Date(substr(transactions_bind$date, 0, 10), format = "%m/%d/%Y")
@@ -103,7 +103,10 @@ formatTransactions <- function(transactions_raw){
   
   # Remove bad data, deduplicate, and fill in misisng sizes
   transactions_clean <- transactions_bind %>%
-    filter(rent <= 5000 & (ft > 300 | is.na(ft)) & unit != "Unknown") %>%
+    filter(rent <= 5000 & 
+             (ft > 300 | is.na(ft)) & 
+             !unit %in% c("Unknown", "#RETAIL") &
+             date > "2008-01-01") %>%
     group_by(building_url, unit) %>%
     arrange(date) %>%
     filter(lead(date) - date > 90  | is.na(lead(date))) %>%

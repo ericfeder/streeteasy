@@ -142,8 +142,12 @@ transactions_raw <- lapply(building_info, getTransactions)
 transactions_clean <- formatTransactions(transactions_raw)
 transactions_train <- prepareForTraining(transactions_clean)
 
-# Train model
-model <- gbm(rent ~ ., data = transactions_train)
+# Train models
+models <- transactions_train %>%
+  filter(!is.na(beds)) %>%
+  group_by(beds) %>%
+  do(model = gbm(rent ~ . - beds, data = ., shrinkage = 0.01, n.trees = 1000,
+                 distribution = "laplace", bag.fraction = 1))
 
 # Plot
 transactions_clean %>%

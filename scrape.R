@@ -27,27 +27,11 @@ getAllBuildingURLs <- function(base_url){
 }
 
 # Extract transactions from building pages
-getAddressInfo <- function(house_number, street){
-  app_id <- Sys.getenv("NYC_API_ID")
-  app_key <- Sys.getenv("NYC_API_KEY")
-  base_url <- "https://api.cityofnewyork.us/geoclient/v1/address.json?houseNumber=%d&street=%s&borough=Manhattan&app_id=%s&app_key=%s"
-  url <- URLencode(sprintf(base_url, house_number, street, app_id, app_key))
-  message(sprintf("Hitting %s", url))
-  response <- content(GET(url))
-  return(response$address)
-}
 getStreetAddress <- function(page){
   address <- content(page) %>%
     html_nodes("h1+ .subtitle") %>% 
     html_text()
-  house_number <- as.numeric(str_extract(address, "^[[0-9]]+"))
-  street <- str_extract(address, "^[[0-9]]+[[:alnum:]|[:space:]]+,")
-  street <- gsub("^[[:digit:]]+ |,", "", street)
-  address_info <- getAddressInfo(house_number, street)
-  return(list(address = address, 
-              house_number = house_number, 
-              street = street, 
-              address_info = address_info))
+  return(address)
 }
 getActivityId <- function(page){
   page_content <- content(page, as = "text")
@@ -55,15 +39,25 @@ getActivityId <- function(page){
   id <- as.numeric(gsub("[^[:digit:]]", "", id_string))
   return(id)
 }
+getLatLon <- function(page){
+  page_content <- content(page, as = "text")
+  latlon_string <- str_extract(page_content, "se:map:point='[[0-9|.|-]]+,[[0-9|.|-]]+'")
+  latlon_string <- gsub("'", "", substring(latlon_string, 15))
+  latlon <- as.numeric(unlist(strsplit(latlon_string, ",")))
+  return(latlon)
+}
 getBuildingInfo <- function(building_url){
   url <- sprintf("http://streeteasy.com%s#tab_building_detail=3", building_url)
   message(sprintf("Scraping %s", url))
   page <- GET(url)
   street_address <- getStreetAddress(page)
   activity_id <- getActivityId(page)
+  lat_lon <- getLatLon(page)
   return(list(building_url = building_url,
+              street_address = street_address,
               activity_id = activity_id,
-              street_address = street_address))
+              lat = lat_lon[1],
+              lon = lat_lon[2]))
 }
 
 getTransactions <- function(info){
@@ -84,12 +78,10 @@ getTransactions <- function(info){
       html_attr("href")
     table <- data.frame(listing_url = links, 
                         building_url = info$building_url, 
-                        street_address = info$street_address$address,
-                        street = info$street_address$address_info$giStreetName1,
-                        cross_street1 = info$street_address$address_info$lowCrossStreetName1,
-                        cross_street2 = info$street_address$address_info$highCrossStreetName1,
-                        table,
-                        stringsAsFactors = FALSE)
+                        street_address = info$street_address,
+                        lat = info$lat,
+                        lon = info$lon,
+                        table)
     return(table)
   }
 }
@@ -101,12 +93,12 @@ formatTransactions <- function(transactions_raw){
   
   # Rename columns
   transactions_bind$Floorplan <- NULL
-  colnames(transactions_bind) <- tolower(gsub("\\.", "", colnames(transactions_bind)))
+  colnames(transactions_bind) <- tolower(gsub("[^[:alpha:]]|_", "", colnames(transactions_bind)))
   
   # Clean up column values
   transactions_bind$date <- as.Date(substr(transactions_bind$date, 0, 10), format = "%m/%d/%Y")
   transactions_bind$rent <- as.numeric(gsub("[^[:digit:]]", "", str_extract(transactions_bind$rent, "^\\$.+ ")))
-  transactions_bind$ft <- as.numeric(gsub("[^[:digit:]]", "", transactions_bind$ft))
+  transactions_bind$ft <- as.numeric(gsub("[^[:digit:]]", "", transactions_bind$ft, perl = TRUE))
   transactions_bind$ft[transactions_bind$ft == 0] <- NA
   
   # Remove bad data, deduplicate, and fill in misisng sizes
@@ -139,17 +131,7 @@ prepareForTraining <- function(data){
   data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
   data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
   data$days_ago <- as.numeric(Sys.Date() - data$date)
-  street_names <- data %>%
-    distinct(street_address, street, cross_street1, cross_street2) %>%
-    gather(type, street, -street_address) %>%
-    count(street) %>%
-    filter(n > 7 & street != "BEND") %>%
-    .$street
-  for (name in street_names){
-    new_colname <- tolower(gsub(" ", "_", paste("street", name)))
-    data[[new_colname]] <- factor(rowSums(name == data[, c("street", "cross_street1", "cross_street2")]) > 0)
-  }
-  data <- data[, c("rent", "beds", "extra_bath", "days_ago", "ft", tolower(gsub(" ", "_", paste("street", street_names))))]
+  data <- data[, c("rent", "beds", "extra_bath", "days_ago", "ft", "lat", "lon")]
   return(data)
 }
 

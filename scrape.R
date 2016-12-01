@@ -143,9 +143,5 @@ transactions_raw <- lapply(building_info, getTransactions)
 transactions_clean <- formatTransactions(transactions_raw)
 transactions_train <- prepareForTraining(transactions_clean)
 
-# Train models
-models <- transactions_train %>%
-  filter(!is.na(beds)) %>%
-  group_by(beds) %>%
-  do(ctree = ctree(rent ~ . - beds, data = .),
-     cforest = cforest(rent ~ extra_bath + days_ago + ft + lat + lon, data = .))
+# Train model
+model <- cforest(rent ~ ., data = transactions_train)

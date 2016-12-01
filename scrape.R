@@ -3,8 +3,6 @@ library(rvest)
 library(httr)
 library(stringr)
 library(dplyr)
-library(tidyr)
-library(ggplot2)
 library(party)
 
 # Get list of buildings
@@ -151,19 +149,3 @@ models <- transactions_train %>%
   group_by(beds) %>%
   do(ctree = ctree(rent ~ . - beds, data = .),
      cforest = cforest(rent ~ extra_bath + days_ago + ft + lat + lon, data = .))
-  
-# Plot
-transactions_clean %>%
-  filter(!is.na(ft)) %>%
-  group_by(beds) %>%
-  filter(n() > 50) %>%
-  ungroup() %>%
-  ggplot(aes(ft, rent, group = beds, colour = beds)) +
-  geom_smooth(se = FALSE)
-
-transactions_clean %>%
-  group_by(beds) %>%
-  filter(n() > 50) %>%
-  ungroup() %>%
-  ggplot(aes(date, rent, group = beds, colour = beds)) +
-  geom_smooth(se = FALSE)

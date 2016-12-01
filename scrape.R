@@ -5,7 +5,7 @@ library(stringr)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(gbm)
+library(party)
 
 # Get list of buildings
 getBuildingURLs <- function(base_url, page_num){
@@ -130,7 +130,7 @@ formatTransactions <- function(transactions_raw){
 
 # Prepare data for model training
 prepareForTraining <- function(data){
-  data$extra_bath <- factor(data$baths != "1 bath")
+  data$extra_bath <- data$baths != "1 bath"
   data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
   data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
   data$days_ago <- as.numeric(Sys.Date() - data$date)
@@ -149,9 +149,9 @@ transactions_train <- prepareForTraining(transactions_clean)
 models <- transactions_train %>%
   filter(!is.na(beds)) %>%
   group_by(beds) %>%
-  do(model = gbm(rent ~ . - beds, data = ., shrinkage = 0.01, n.trees = 1000,
-                 distribution = "laplace", bag.fraction = 1))
-
+  do(ctree = ctree(rent ~ . - beds, data = .),
+     cforest = cforest(rent ~ extra_bath + days_ago + ft + lat + lon, data = .))
+  
 # Plot
 transactions_clean %>%
   filter(!is.na(ft)) %>%

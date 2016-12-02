@@ -18,17 +18,19 @@ getAddressInfo <- function(house_number, street, app_id = Sys.getenv("NYC_API_ID
   url <- URLencode(sprintf(base_url, house_number, street, app_id, app_key))
   message(sprintf("Hitting %s", url))
   response <- content(GET(url))
-  return(response$address$firstStreetNameNormalized)
+  return(list(street_name_normalized = response$address$firstStreetNameNormalized,
+              zip_code = response$address$zipCode))
 }
 tryAddressInfo <- function(house_number, street){
   try(getAddressInfo(house_number, street))
 }
-elevators$street_name_normalized <- mapply(FUN = tryAddressInfo, elevators$HOUSE_NUMBER, elevators$STREET_NAME)
+address_info <- mapply(FUN = tryAddressInfo, elevators$HOUSE_NUMBER, elevators$STREET_NAME, SIMPLIFY = FALSE, USE.NAMES = FALSE)
 
 # Write to csv
 elevators_write <- elevators %>%
-  transmute(house_number = as.integer(HOUSE_NUMBER),
-            street_name = street_name_normalized) %>%
-  filter(!is.na(house_number)) %>%
-  arrange(street_name, house_number)
+  transmute(house_number = HOUSE_NUMBER,
+            street_name = sapply(address_info, function(x) x$street_name_normalized),
+            zip_code = as.character(sapply(address_info, function(x) x$zip_code)),
+            zip_code = ifelse(zip_code == "NULL", NA, zip_code)) %>%
+  arrange(street_name, as.integer(house_number))
 write.csv(elevators_write, file = "manhattan_elevator_buildings.csv", row.names = FALSE)

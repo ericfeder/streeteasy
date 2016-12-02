@@ -24,7 +24,7 @@ getAllBuildingURLs <- function(base_url){
   return(unique(unlist(building_urls)))
 }
 
-# Extract transactions from building pages
+# Get building information
 getStreetAddress <- function(page){
   address <- content(page) %>%
     html_nodes("h1+ .subtitle") %>% 
@@ -58,6 +58,7 @@ getBuildingInfo <- function(building_url){
               lon = lat_lon[2]))
 }
 
+# Get list of transactions
 getTransactions <- function(info){
   url <- sprintf("http://streeteasy.com/nyc/property_activity/past_transactions_component/%d?show_rentals=true", 
                  info$activity_id)
@@ -82,6 +83,29 @@ getTransactions <- function(info){
                         table)
     return(table)
   }
+}
+
+# Get listing information
+getListingInfo <- function(listing_url){
+  url <- sprintf("http://streeteasy.com%s", listing_url)
+  message(sprintf("Scraping %s", url))
+  page <- read_html(url)
+  description <- page %>%
+    html_nodes(".listings_sections:nth-child(1)") %>%
+    html_text()
+  non_amenities <- c("", "This highlight has been verified by StreetEasy", "Highlights", 
+                     "googletag.display(\"rtt_main_p1\");", "Amenities", "Building Amenities",
+                     "googletag.cmd.push(function() {", "});", "Rental", "Listing Amenities")
+  amenities <- page %>%
+    html_nodes(".amenities") %>%
+    html_text() %>% 
+    strsplit("\n") %>% 
+    unlist() %>% 
+    trimws() %>% 
+    setdiff(., non_amenities)
+  return(list(listing_url = listing_url,
+              amenities = amenities,
+              description = description))
 }
 
 # Format transactions
@@ -136,10 +160,13 @@ prepareForTraining <- function(data){
   return(data)
 }
 
-# Run
+# Get raw data
 building_urls <- getAllBuildingURLs("http://streeteasy.com/buildings/hudson-heights")
 building_info <- lapply(building_urls, getBuildingInfo)
 transactions_raw <- lapply(building_info, getTransactions)
+listing_info <- lapply(transactions_raw, function(x) lapply(x$listing_url, getListingInfo))
+
+# Format data
 transactions_clean <- formatTransactions(transactions_raw)
 transactions_train <- prepareForTraining(transactions_clean)
 

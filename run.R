@@ -31,6 +31,12 @@ getStreetAddress <- function(page){
     html_text()
   return(address)
 }
+getBuildingClass <- function(page){
+  class <- content(page) %>%
+    html_nodes(".clickable") %>% 
+    html_text()
+  return(class)
+}
 getAddressInfo <- function(house_number, street){ 
   app_id <- Sys.getenv("NYC_API_ID")
   app_key <- Sys.getenv("NYC_API_KEY")
@@ -100,14 +106,16 @@ getBuildingInfo <- function(building_url, elevator_buildings){
   message(sprintf("Scraping %s", url))
   page <- GET(url)
   street_address <- getStreetAddress(page)
+  class <- getBuildingClass(page)
   normalized_addresses <- getNormalizedAddresses(street_address)
   elevator_status <- getElevatorStatus(normalized_addresses, elevator_buildings)
   activity_id <- getActivityId(page)
   lat_lon <- getLatLon(page)
   return(list(building_url = building_url,
               street_address = street_address,
+              class = class,
               normalized_addresses = normalized_addresses,
-              elevator = elevator_status,
+              on_elevator_list = elevator_status,
               activity_id = activity_id,
               lat = lat_lon[1],
               lon = lat_lon[2]))

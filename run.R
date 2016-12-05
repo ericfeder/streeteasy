@@ -164,7 +164,25 @@ getListingInfo <- function(listing_url){
 }
 
 # Format transactions
-formatTransactions <- function(transactions_raw){
+appendAmenities <- function(transactions_raw, listing_info, building_info){
+  if (!is.null(transactions_raw)){
+    transactions_raw$dishwasher <- sapply(listing_info, function(x) "Dishwasher" %in% x$amenities)
+    transactions_raw$laundry_in_unit <- sapply(listing_info, function(x) "Washer/Dryer In-Unit" %in% x$amenities)
+    
+    all_amenities <- unique(unlist(lapply(listing_info, function(x) x$amenities)))
+    descriptions <- sapply(listing_info, function(x) x$description)
+    transactions_raw$laundry_in_building <- "Laundry in Building" %in% all_amenities
+    transactions_raw$live_in_super <- "Live-in Super" %in% all_amenities
+    transactions_raw$elevator <- "Elevator" %in% all_amenities | any(grepl("elevator", descriptions, ignore.case = TRUE))
+    transactions_raw$elevator_in_listing <- sapply(listing_info, function(x) "Elevator" %in% x$amenities) | grepl("elevator", descriptions, ignore.case = TRUE)
+    transactions_raw$elevator_official <- building_info$elevator
+  }
+  return(transactions_raw)
+}
+formatTransactions <- function(transactions_raw, listing_info, building_info){
+  # Append amenities information
+  
+  
   # Bind rows
   transactions_bind <- bind_rows(transactions_raw)
   

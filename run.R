@@ -127,12 +127,13 @@ getTransactions <- function(info){
                  info$activity_id)
   message(sprintf("Scraping %s", url))
   activity_site <- read_html(url)
-  table <- activity_site %>%
-    html_node("#past_transactions_table") %>% 
+  tables <- activity_site %>%
+    html_nodes("#past_transactions_table") %>% 
     html_table()
   if (length(tables) == 0) {
     return(NULL)
   } else {
+    table <- tables[[1]]
     links <- activity_site %>% 
       html_nodes(".activity_unit") %>% 
       html_children() %>% 

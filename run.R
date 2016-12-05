@@ -41,16 +41,21 @@ getAddressInfo <- function(house_number, street){
   return(response$address)
 }
 extractAddresses <- function(address_info){
-  house_numbers <- address_info[grep("giLowHouseNumber", names(address_info))]
+  low_numbers <- address_info[grep("giLowHouseNumber", names(address_info))]
+  high_numbers <- address_info[grep("giHighHouseNumber", names(address_info))]
   street_names <- address_info[grep("giStreetName", names(address_info))]
-  house_number_ind <- gsub("[^[:digit:]]", "", names(house_numbers))
-  street_name_ind <- gsub("[^[:digit:]]", "", names(street_names))
-  matched_inds <- intersect(street_name_ind, house_number_ind)
   
-  house_numbers_matched <- house_numbers[house_number_ind %in% matched_inds]
-  street_names_matched <- street_names[street_name_ind %in% matched_inds]
+  low_numbers_ind <- gsub("[^[:digit:]]", "", names(low_numbers))
+  high_numbers_ind <- gsub("[^[:digit:]]", "", names(high_numbers))
+  street_names_ind <- gsub("[^[:digit:]]", "", names(street_names))
+  matched_inds <- Reduce(intersect, list(low_numbers_ind, high_numbers_ind, street_names_ind))
+  
+  low_numbers_matched <- low_numbers[low_numbers_ind %in% matched_inds]
+  high_numbers_matched <- high_numbers[high_numbers_ind %in% matched_inds]
+  street_names_matched <- street_names[street_names_ind %in% matched_inds]
   transposed_addresses <- mapply(FUN = list, 
-                                 house_number = house_numbers_matched, 
+                                 low_number = low_numbers_matched,
+                                 high_number = high_numbers_matched,
                                  street_name = street_names_matched, 
                                  SIMPLIFY = FALSE, USE.NAMES = FALSE)
 }
@@ -63,8 +68,14 @@ getNormalizedAddresses <- function(address){
   return(transposed_addresses)
 }
 getElevatorStatusSingle <- function(normalized_address, elevator_buildings){
-  match_number <- normalized_address$house_number == elevator_buildings$house_number
-  match_street <- normalized_address$street_name == elevator_buildings$street_name
+  low_number <- as.integer(normalized_address$low_number)
+  high_number <- as.integer(normalized_address$high_number)
+  if (is.na(low_number) | is.na(high_number)){
+    return(FALSE)
+  }
+  address_numbers <- seq(low_number, high_number, by = 2)
+  match_number <- elevator_buildings$house_number %in% address_numbers
+  match_street <- elevator_buildings$street_name == normalized_address$street_name
   return(any(match_number & match_street))
 }
 getElevatorStatus <- function(normalized_addresses, elevator_buildings){

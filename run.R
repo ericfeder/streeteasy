@@ -174,25 +174,20 @@ getListingInfo <- function(listing_url){
 # Format transactions
 appendAmenities <- function(transactions_raw, listing_info, building_info){
   if (!is.null(transactions_raw)){
-    transactions_raw$dishwasher <- sapply(listing_info, function(x) "Dishwasher" %in% x$amenities)
+    transactions_raw$dishwasher <- sapply(listing_info, function(x) "Dishwasher" %in% x$amenities) | 
+      grepl("dish *washer", sapply(listing_info, function(x) x$description), ignore.case = TRUE)
     transactions_raw$laundry_in_unit <- sapply(listing_info, function(x) "Washer/Dryer In-Unit" %in% x$amenities)
-    
-    all_amenities <- unique(unlist(lapply(listing_info, function(x) x$amenities)))
-    descriptions <- sapply(listing_info, function(x) x$description)
-    transactions_raw$laundry_in_building <- "Laundry in Building" %in% all_amenities
-    transactions_raw$live_in_super <- "Live-in Super" %in% all_amenities
-    transactions_raw$elevator <- "Elevator" %in% all_amenities | any(grepl("elevator", descriptions, ignore.case = TRUE))
-    transactions_raw$elevator_in_listing <- sapply(listing_info, function(x) "Elevator" %in% x$amenities) | grepl("elevator", descriptions, ignore.case = TRUE)
-    transactions_raw$elevator_official <- building_info$elevator
+    transactions_raw$laundry_in_building <- mean(sapply(listing_info, function(x) "Laundry in Building" %in% x$amenities)) > 0.15
+    transactions_raw$elevator <- building_info$on_elevator_list
   }
   return(transactions_raw)
 }
 formatTransactions <- function(transactions_raw, listing_info, building_info){
   # Append amenities information
-  
+  transactions_append <- mapply(FUN = appendAmenities, transactions_raw, listing_info, building_info, SIMPLIFY = FALSE)
   
   # Bind rows
-  transactions_bind <- bind_rows(transactions_raw)
+  transactions_bind <- bind_rows(transactions_append)
   
   # Rename columns
   transactions_bind$Floorplan <- NULL
@@ -246,10 +241,10 @@ building_urls <- getAllBuildingURLs("http://streeteasy.com/buildings/hudson-heig
 elevator_buildings <- read.csv("manhattan_elevator_buildings.csv", stringsAsFactors = FALSE)
 building_info <- lapply(building_urls, getBuildingInfo, elevator_buildings = elevator_buildings)
 transactions_raw <- lapply(building_info, getTransactions)
-listing_info <- lapply(transactions_raw, function(x) lapply(x$listing_url, getListingInfo))
+listing_info <- mclapply(transactions_raw, function(x) lapply(x$listing_url, getListingInfo), mc.cores = 5)
 
 # Format data
-transactions_clean <- formatTransactions(transactions_raw)
+transactions_clean <- formatTransactions(transactions_raw, listing_info, building_info)
 transactions_train <- prepareForTraining(transactions_clean)
 
 # Train model

@@ -6,11 +6,14 @@ shinyUI(fluidPage(
   
   sidebarLayout(
     sidebarPanel(
+      leafletOutput("map"),
       selectInput("beds", label = "Beds", choices = as.character(levels(model@data@env$input$beds))),
-      selectInput("extra_bath", label = "Baths", choices = c("1", "More than 1")),
       numericInput("ft", label = "Size", min = 0, max = 2000, value = 500),
-      numericInput("lat", label = "Latitude", value = 40.8478),
-      numericInput("lon", label = "Longitude", value = -73.9418)
+      checkboxInput("extra_bath", label = "More than 1 Bathroom"),
+      checkboxInput("laundry_in_unit", label = "Washer/Dryer in Unit"),
+      checkboxInput("laundry_in_building", label = "Laundry in Building"),
+      checkboxInput("dishwasher", label = "Dishwasher"),
+      checkboxInput("elevator", label = "Elevator")
     ),
     
     mainPanel(

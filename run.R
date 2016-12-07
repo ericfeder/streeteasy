@@ -232,7 +232,9 @@ prepareForTraining <- function(data){
   data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
   data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
   data$days_ago <- as.numeric(Sys.Date() - data$date)
-  data <- data[, c("rent", "beds", "extra_bath", "days_ago", "ft", "lat", "lon")]
+  data <- data[, c("rent", "beds", "extra_bath", "days_ago", 
+                   "ft", "lat", "lon", "dishwasher", "elevator",
+                   "laundry_in_unit", "laundry_in_building")]
   return(data)
 }
 

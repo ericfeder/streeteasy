@@ -6,7 +6,7 @@ library(dplyr)
 library(party)
 
 # Get list of buildings
-getBuildingURLs <- function(base_url, page_num){
+fetchBuildingURLs <- function(base_url, page_num){
   url <- sprintf("%s?page=%d", base_url, page_num)
   message(sprintf("Scraping %s", url))
   buildings_list <- read_html(url)
@@ -15,29 +15,29 @@ getBuildingURLs <- function(base_url, page_num){
     html_attr("href")
   return(building_urls)
 }
-getAllBuildingURLs <- function(base_url){
+fetchAllBuildingURLs <- function(base_url){
   num_pages <- read_html(base_url) %>% 
     html_nodes(".gap+ .page a") %>%
     html_text() %>%
     as.integer()
-  building_urls <- lapply(seq_len(num_pages), getBuildingURLs, base_url = base_url)
+  building_urls <- lapply(seq_len(num_pages), fetchBuildingURLs, base_url = base_url)
   return(unique(unlist(building_urls)))
 }
 
 # Get building information
-getStreetAddress <- function(page){
+extractStreetAddress <- function(page){
   address <- content(page) %>%
     html_nodes("h1+ .subtitle") %>% 
     html_text()
   return(address)
 }
-getBuildingClass <- function(page){
+extractBuildingClass <- function(page){
   class <- content(page) %>%
     html_nodes(".clickable") %>% 
     html_text()
   return(class)
 }
-getAddressInfo <- function(house_number, street){ 
+fetchAddressInfo <- function(house_number, street){ 
   app_id <- Sys.getenv("NYC_API_ID")
   app_key <- Sys.getenv("NYC_API_KEY")
   base_url <- "https://api.cityofnewyork.us/geoclient/v1/address.json?houseNumber=%s&street=%s&borough=Manhattan&app_id=%s&app_key=%s"
@@ -65,15 +65,15 @@ extractAddresses <- function(address_info){
                                  street_name = street_names_matched, 
                                  SIMPLIFY = FALSE, USE.NAMES = FALSE)
 }
-getNormalizedAddresses <- function(address){
+fetchNormalizedAddresses <- function(address){
   house_number <- as.numeric(str_extract(address, "^[[0-9]]+"))
   street <- str_extract(address, "^[[0-9]]+[[:alnum:]|[:space:]]+,")
   street <- gsub("^[[:digit:]]+ |,", "", street)
-  address_info <- getAddressInfo(house_number, street)
+  address_info <- fetchAddressInfo(house_number, street)
   transposed_addresses <- extractAddresses(address_info)
   return(transposed_addresses)
 }
-getElevatorStatusSingle <- function(normalized_address, elevator_buildings){
+checkElevatorStatusSingle <- function(normalized_address, elevator_buildings){
   low_number <- as.integer(normalized_address$low_number)
   high_number <- as.integer(normalized_address$high_number)
   if (is.na(low_number) | is.na(high_number)){
@@ -84,33 +84,33 @@ getElevatorStatusSingle <- function(normalized_address, elevator_buildings){
   match_street <- elevator_buildings$street_name == normalized_address$street_name
   return(any(match_number & match_street))
 }
-getElevatorStatus <- function(normalized_addresses, elevator_buildings){
-  has_elevator <- sapply(normalized_addresses, getElevatorStatusSingle, elevator_buildings = elevator_buildings)
+checkElevatorStatus <- function(normalized_addresses, elevator_buildings){
+  has_elevator <- sapply(normalized_addresses, checkElevatorStatusSingle, elevator_buildings = elevator_buildings)
   any(has_elevator)
 }
-getActivityId <- function(page){
+extractActivityId <- function(page){
   page_content <- content(page, as = "text")
   id_string <- str_extract(page_content, "past_transactions_component/[[0-9]]+\\?")
   id <- as.numeric(gsub("[^[:digit:]]", "", id_string))
   return(id)
 }
-getLatLon <- function(page){
+extractLatLon <- function(page){
   page_content <- content(page, as = "text")
   latlon_string <- str_extract(page_content, "se:map:point='[[0-9|.|-]]+,[[0-9|.|-]]+'")
   latlon_string <- gsub("'", "", substring(latlon_string, 15))
   latlon <- as.numeric(unlist(strsplit(latlon_string, ",")))
   return(latlon)
 }
-getBuildingInfo <- function(building_url, elevator_buildings){
+fetchBuildingInfo <- function(building_url, elevator_buildings){
   url <- sprintf("http://streeteasy.com%s#tab_building_detail=3", building_url)
   message(sprintf("Scraping %s", url))
   page <- GET(url)
-  street_address <- getStreetAddress(page)
-  class <- getBuildingClass(page)
-  normalized_addresses <- getNormalizedAddresses(street_address)
-  elevator_status <- getElevatorStatus(normalized_addresses, elevator_buildings)
-  activity_id <- getActivityId(page)
-  lat_lon <- getLatLon(page)
+  street_address <- extractStreetAddress(page)
+  class <- extractBuildingClass(page)
+  normalized_addresses <- fetchNormalizedAddresses(street_address)
+  elevator_status <- checkElevatorStatus(normalized_addresses, elevator_buildings)
+  activity_id <- extractActivityId(page)
+  lat_lon <- extractLatLon(page)
   return(list(building_url = building_url,
               street_address = street_address,
               class = class,
@@ -122,7 +122,7 @@ getBuildingInfo <- function(building_url, elevator_buildings){
 }
 
 # Get list of transactions
-getTransactions <- function(info){
+fetchTransactions <- function(info){
   url <- sprintf("http://streeteasy.com/nyc/property_activity/past_transactions_component/%d?show_rentals=true", 
                  info$activity_id)
   message(sprintf("Scraping %s", url))
@@ -149,7 +149,7 @@ getTransactions <- function(info){
 }
 
 # Get listing information
-getListingInfo <- function(listing_url){
+fetchListingInfo <- function(listing_url){
   url <- sprintf("http://streeteasy.com%s", listing_url)
   message(sprintf("Scraping %s", url))
   page <- read_html(url)
@@ -239,11 +239,11 @@ prepareForTraining <- function(data){
 }
 
 # Get raw data
-building_urls <- getAllBuildingURLs("http://streeteasy.com/buildings/hudson-heights")
+building_urls <- fetchAllBuildingURLs("http://streeteasy.com/buildings/hudson-heights")
 elevator_buildings <- read.csv("manhattan_elevator_buildings.csv", stringsAsFactors = FALSE)
-building_info <- lapply(building_urls, getBuildingInfo, elevator_buildings = elevator_buildings)
-transactions_raw <- lapply(building_info, getTransactions)
-listing_info <- mclapply(transactions_raw, function(x) lapply(x$listing_url, getListingInfo), mc.cores = 5)
+building_info <- lapply(building_urls[1:5], fetchBuildingInfo, elevator_buildings = elevator_buildings)
+transactions_raw <- lapply(building_info, fetchTransactions)
+listing_info <- lapply(transactions_raw, function(x) lapply(x$listing_url, fetchListingInfo))
 
 # Format data
 transactions_clean <- formatTransactions(transactions_raw, listing_info, building_info)

@@ -122,40 +122,50 @@ fetchBuildingInfo <- function(building_url, elevator_buildings){
 }
 
 # Get list of transactions
-fetchTransactions <- function(info){
-  url <- sprintf("http://streeteasy.com/nyc/property_activity/past_transactions_component/%d?show_rentals=true", 
-                 info$activity_id)
-  message(sprintf("Scraping %s", url))
-  activity_site <- read_html(url)
+extractTransactionTable <- function(activity_site){
   tables <- activity_site %>%
     html_nodes("#past_transactions_table") %>% 
     html_table()
   if (length(tables) == 0) {
     return(NULL)
   } else {
-    table <- tables[[1]]
-    links <- activity_site %>% 
-      html_nodes(".activity_unit") %>% 
-      html_children() %>% 
-      html_attr("href")
-    table <- data.frame(listing_url = links, 
-                        building_url = info$building_url, 
-                        street_address = info$street_address,
-                        lat = info$lat,
-                        lon = info$lon,
-                        table)
-    return(table)
+    return(tables[[1]])
+  }
+}
+extractListingUrls <- function(activity_site){
+  listing_urls <- activity_site %>% 
+    html_nodes(".activity_unit") %>% 
+    html_children() %>% 
+    html_attr("href")
+  return(listing_urls)
+}
+fetchTransactions <- function(info){
+  url <- sprintf("http://streeteasy.com/nyc/property_activity/past_transactions_component/%d?show_rentals=true", 
+                 info$activity_id)
+  message(sprintf("Scraping %s", url))
+  activity_site <- read_html(url)
+  transaction_table <- extractTransactionTable(activity_site)
+  if (is.null(transaction_table)){
+    return(NULL)
+  } else {
+    listing_urls <- extractListingUrls(activity_site)  
+    transactions <- data.frame(listing_url = listing_urls, 
+                               building_url = info$building_url, 
+                               street_address = info$street_address,
+                               lat = info$lat,
+                               lon = info$lon,
+                               transaction_table)
+    return(transactions)
   }
 }
 
 # Get listing information
-fetchListingInfo <- function(listing_url){
-  url <- sprintf("http://streeteasy.com%s", listing_url)
-  message(sprintf("Scraping %s", url))
-  page <- read_html(url)
+extractListingDescription <- function(page){
   description <- page %>%
     html_nodes(".listings_sections:nth-child(1)") %>%
     html_text()
+}
+extractListingAmenities <- function(page){
   non_amenities <- c("", "This highlight has been verified by StreetEasy", "Highlights", 
                      "googletag.display(\"rtt_main_p1\");", "Amenities", "Building Amenities",
                      "googletag.cmd.push(function() {", "});", "Rental", "Listing Amenities")
@@ -166,6 +176,14 @@ fetchListingInfo <- function(listing_url){
     unlist() %>% 
     trimws() %>% 
     setdiff(., non_amenities)
+  return(amenities)
+}
+fetchListingInfo <- function(listing_url){
+  url <- sprintf("http://streeteasy.com%s", listing_url)
+  message(sprintf("Scraping %s", url))
+  page <- read_html(url)
+  description <- extractListingDescription(page)
+  amenities <- extractListingAmenities(page)
   return(list(listing_url = listing_url,
               amenities = amenities,
               description = description))

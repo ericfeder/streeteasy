@@ -150,10 +150,6 @@ fetchTransactions <- function(info){
   } else {
     listing_urls <- extractListingUrls(activity_site)  
     transactions <- data.frame(listing_url = listing_urls, 
-                               building_url = info$building_url, 
-                               street_address = info$street_address,
-                               lat = info$lat,
-                               lon = info$lon,
                                transaction_table)
     return(transactions)
   }
@@ -192,11 +188,17 @@ fetchListingInfo <- function(listing_url){
 # Format transactions
 appendAmenities <- function(transactions_raw, listing_info, building_info){
   if (!is.null(transactions_raw)){
-    transactions_raw$dishwasher <- sapply(listing_info, function(x) "Dishwasher" %in% x$amenities) | 
-      grepl("dish *washer", sapply(listing_info, function(x) x$description), ignore.case = TRUE)
-    transactions_raw$laundry_in_unit <- sapply(listing_info, function(x) "Washer/Dryer In-Unit" %in% x$amenities)
-    transactions_raw$laundry_in_building <- mean(sapply(listing_info, function(x) "Laundry in Building" %in% x$amenities)) > 0.15
-    transactions_raw$elevator <- building_info$on_elevator_list
+    transactions_raw <- transactions_raw %>%
+      mutate(building_url = building_info$building_url,
+             street_address = building_info$street_address,
+             lat = building_info$lat,
+             lon = building_info$lon,
+             elevator = building_info$on_elevator_list,
+             laundry_in_building = mean(sapply(listing_info, function(x) "Laundry in Building" %in% x$amenities)) > 0.15,
+             laundry_in_unit = sapply(listing_info, function(x) "Washer/Dryer In-Unit" %in% x$amenities),
+             dishwasher = sapply(listing_info, function(x) "Dishwasher" %in% x$amenities) | 
+               grepl("dish *washer", sapply(listing_info, function(x) x$description), ignore.case = TRUE)
+      )
   }
   return(transactions_raw)
 }
@@ -259,7 +261,7 @@ prepareForTraining <- function(data){
 # Get raw data
 building_urls <- fetchAllBuildingURLs("http://streeteasy.com/buildings/hudson-heights")
 elevator_buildings <- read.csv("manhattan_elevator_buildings.csv", stringsAsFactors = FALSE)
-building_info <- lapply(building_urls[1:5], fetchBuildingInfo, elevator_buildings = elevator_buildings)
+building_info <- lapply(building_urls, fetchBuildingInfo, elevator_buildings = elevator_buildings)
 transactions_raw <- lapply(building_info, fetchTransactions)
 listing_info <- lapply(transactions_raw, function(x) lapply(x$listing_url, fetchListingInfo))
 

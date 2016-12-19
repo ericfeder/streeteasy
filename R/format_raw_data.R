@@ -1,5 +1,9 @@
+# Load package
+library(dplyr)
+library(stringr)
+
 # Load raw data
-load("raw.RData")
+load("data/raw.RData")
 
 # Format transactions
 appendAmenities <- function(transactions_raw, listing_info, building_info){
@@ -66,7 +70,7 @@ formatTransactions <- function(transactions_raw, listing_info, building_info){
 
 # Prepare data for model training
 prepareForTraining <- function(data){
-  data -> data %>% filter(!is.na(beds))
+  data <- data %>% filter(!is.na(beds))
   data$extra_bath <- !is.na(data$baths) && data$baths != "1 bath"
   data$beds[data$beds %in% c("4 beds", "5 beds", "6 beds")] <- "4+ beds"
   data$beds <- factor(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))

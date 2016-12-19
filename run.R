@@ -270,6 +270,9 @@ building_info <- lapply(building_urls, fetchBuildingInfo, elevator_buildings = e
 transactions_raw <- lapply(building_info, fetchTransactions)
 listing_info <- lapply(transactions_raw, function(x) lapply(x$listing_url, fetchListingInfo))
 
+# Save raw data
+save(building_info, transactions_raw, listing_info, file = "raw.RData")
+
 # Format data
 transactions_clean <- formatTransactions(transactions_raw, listing_info, building_info)
 transactions_train <- prepareForTraining(transactions_clean)

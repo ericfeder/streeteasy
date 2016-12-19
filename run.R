@@ -223,20 +223,22 @@ formatTransactions <- function(transactions_raw, listing_info, building_info){
   transactions_clean <- transactions_bind %>%
     filter(rent <= 5000 & 
              (ft > 300 | is.na(ft)) & 
-             !unit %in% c("Unknown", "#RETAIL") &
-             date > "2008-01-01") %>%
-    group_by(building_url, unit) %>%
+             !unit %in% c("Unknown", "#RETAIL", "", "#STORE") &
+             date > "2010-01-01") %>%
+    group_by(building_url, unit, beds) %>%
     arrange(date) %>%
     filter(lead(date) - date > 90  | is.na(lead(date))) %>%
-    mutate(ft = round(mean(ft, na.rm = TRUE))) %>%
+    mutate(ft = round(mean(ft, na.rm = TRUE)),
+           ft = ifelse(is.nan(ft), NA, ft)) %>%
     ungroup()
   
   # Clean up column values
   transactions_clean$beds <- recode(transactions_clean$beds, 
-                                    `1.5 beds` = "1 bed",
+                                    `1.5 beds` = "2 beds",
                                     `2,200 beds` = "2 beds",
                                     `2.5 beds` = "3 beds",
-                                    `3.5 beds` = "4 beds")
+                                    `3.5 beds` = "4 beds",
+                                    `4.5 beds` = "4 beds")
   transactions_clean$beds[transactions_clean$beds == ""] <- NA
   transactions_clean$baths[transactions_clean$baths == ""] <- NA
   transactions_clean$baths[transactions_clean$baths == "1,150 baths"] <- "1 bath"
@@ -248,13 +250,16 @@ formatTransactions <- function(transactions_raw, listing_info, building_info){
 
 # Prepare data for model training
 prepareForTraining <- function(data){
-  data$extra_bath <- data$baths != "1 bath"
-  data$beds[data$beds %in% c("4 beds", "5 beds")] <- "4+ beds"
-  data$beds <- ordered(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
+  data -> data %>% filter(!is.na(beds))
+  data$extra_bath <- !is.na(data$baths) && data$baths != "1 bath"
+  data$beds[data$beds %in% c("4 beds", "5 beds", "6 beds")] <- "4+ beds"
+  data$beds <- factor(data$beds, levels = c("studio", "1 bed", "2 beds", "3 beds", "4+ beds"))
   data$days_ago <- as.numeric(Sys.Date() - data$date)
   data <- data[, c("rent", "beds", "extra_bath", "days_ago", 
                    "ft", "lat", "lon", "dishwasher", "elevator",
                    "laundry_in_unit", "laundry_in_building")]
+  wrong_class <- sapply(data, is.character) | sapply(data, is.logical)
+  data[wrong_class] <- lapply(data[wrong_class], as.factor)
   return(data)
 }
 
